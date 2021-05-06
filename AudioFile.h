@@ -79,9 +79,10 @@ public:
         
     //=============================================================
     /** Loads an audio file from a given file path.
+     * @param requestedNumFrames, when negative number is given all data is loaded (defaults to -1)
      * @Returns true if the file was successfully loaded
      */
-    bool load (std::string filePath);
+    bool load (std::string filePath, int requestedNumFrames = -1);
     
     /** Saves an audio file to a given file path.
      * @Returns true if the file was successfully saved
@@ -89,8 +90,10 @@ public:
     bool save (std::string filePath, AudioFileFormat format = AudioFileFormat::Wave);
         
     //=============================================================
-    /** Loads an audio file from data in memory */
-    bool loadFromMemory (std::vector<uint8_t>& fileData);
+    /** Loads an audio file from data in memory 
+     * @param requestedNumFrames, when negative number is given all data is loaded (defaults to -1)
+     */
+    bool loadFromMemory (std::vector<uint8_t>& fileData, int requestedNumFrames = -1);
     
     //=============================================================
     /** @Returns the sample rate */
@@ -171,7 +174,8 @@ private:
     
     //=============================================================
     AudioFileFormat determineAudioFileFormat (std::vector<uint8_t>& fileData);
-    bool decodeWaveFile (std::vector<uint8_t>& fileData);
+    /* requestedNumFrames, when negative number is given all data is loaded (defaults to -1) */
+    bool decodeWaveFile (std::vector<uint8_t>& fileData, int requestedNumFrames = -1);
     bool decodeAiffFile (std::vector<uint8_t>& fileData);
     
     //=============================================================
@@ -451,7 +455,7 @@ void AudioFile<T>::shouldLogErrorsToConsole (bool logErrors)
 
 //=============================================================
 template <class T>
-bool AudioFile<T>::load (std::string filePath)
+bool AudioFile<T>::load (std::string filePath, int requestedNumFrames)
 {
     std::ifstream file (filePath, std::ios::binary);
     
@@ -470,7 +474,8 @@ bool AudioFile<T>::load (std::string filePath)
 	size_t length = file.tellg();
 	file.seekg (0, std::ios::beg);
 
-	// allocate
+	// allocate 
+    // TODO: would be nice to not read all data when a limited amount of frames is requested. Can be done by determining sample size + num channels here instead of in loadFromMemory->decode)
 	fileData.resize (length);
 
 	file.read(reinterpret_cast<char*> (fileData.data()), length);
@@ -482,22 +487,25 @@ bool AudioFile<T>::load (std::string filePath)
 		return false;
 	}
     
-    return loadFromMemory (fileData);
+    return loadFromMemory (fileData, requestedNumFrames);
 }
 
 //=============================================================
 template <class T>
-bool AudioFile<T>::loadFromMemory (std::vector<uint8_t>& fileData)
+bool AudioFile<T>::loadFromMemory (std::vector<uint8_t>& fileData, int requestedNumFrames)
 {
     // get audio file format
     audioFileFormat = determineAudioFileFormat (fileData);
     
     if (audioFileFormat == AudioFileFormat::Wave)
     {
-        return decodeWaveFile (fileData);
+        return decodeWaveFile (fileData, requestedNumFrames);
     }
     else if (audioFileFormat == AudioFileFormat::Aiff)
     {
+        if (requestedNumFrames > -1){
+		    reportError ("ERROR: Partial loading of aiff files not supported (yet)\n");
+        }
         return decodeAiffFile (fileData);
     }
     else
@@ -509,7 +517,7 @@ bool AudioFile<T>::loadFromMemory (std::vector<uint8_t>& fileData)
 
 //=============================================================
 template <class T>
-bool AudioFile<T>::decodeWaveFile (std::vector<uint8_t>& fileData)
+bool AudioFile<T>::decodeWaveFile (std::vector<uint8_t>& fileData, int requestedNumFrames)
 {
     // -----------------------------------------------------------
     // HEADER CHUNK
@@ -579,7 +587,18 @@ bool AudioFile<T>::decodeWaveFile (std::vector<uint8_t>& fileData)
     std::string dataChunkID (fileData.begin() + d, fileData.begin() + d + 4);
     int32_t dataChunkSize = fourBytesToInt (fileData, d + 4);
     
-    int numSamples = dataChunkSize / (numChannels * bitDepth / 8);
+    // numSamples refers to number of samples per channel, so this is technically the amount of frames.
+    int numSamples = 0;
+    // When param is negative, just read all data
+    if (requestedNumFrames < 0) 
+    {
+        numSamples = dataChunkSize / (numChannels * bitDepth / 8);
+    } 
+    else 
+    {
+        numSamples = requestedNumFrames;
+    }
+
     int samplesStartIndex = indexOfDataChunk + 8;
     
     clearAudioBuffer();
