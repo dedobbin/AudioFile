@@ -176,7 +176,7 @@ private:
     AudioFileFormat determineAudioFileFormat (std::vector<uint8_t>& fileData);
     /* requestedNumFrames, when negative number is given all data is loaded (defaults to -1) */
     bool decodeWaveFile (std::vector<uint8_t>& fileData, int requestedNumFrames = -1);
-    bool decodeAiffFile (std::vector<uint8_t>& fileData);
+    bool decodeAiffFile (std::vector<uint8_t>& fileData, int requestedNumFrames = -1);
     
     //=============================================================
     bool saveToWaveFile (std::string filePath);
@@ -503,10 +503,7 @@ bool AudioFile<T>::loadFromMemory (std::vector<uint8_t>& fileData, int requested
     }
     else if (audioFileFormat == AudioFileFormat::Aiff)
     {
-        if (requestedNumFrames > -1){
-		    reportError ("ERROR: Partial loading of aiff files not supported (yet)\n");
-        }
-        return decodeAiffFile (fileData);
+        return decodeAiffFile (fileData, requestedNumFrames);
     }
     else
     {
@@ -670,7 +667,7 @@ bool AudioFile<T>::decodeWaveFile (std::vector<uint8_t>& fileData, int requested
 
 //=============================================================
 template <class T>
-bool AudioFile<T>::decodeAiffFile (std::vector<uint8_t>& fileData)
+bool AudioFile<T>::decodeAiffFile (std::vector<uint8_t>& fileData, int requestedNumFrames)
 {
     // -----------------------------------------------------------
     // HEADER CHUNK
@@ -741,13 +738,15 @@ bool AudioFile<T>::decodeAiffFile (std::vector<uint8_t>& fileData)
     // sanity check the data
     if ((soundDataChunkSize - 8) != totalNumAudioSampleBytes || totalNumAudioSampleBytes > static_cast<long>(fileData.size() - samplesStartIndex))
     {
-        reportError ("ERROR: the metadatafor this file doesn't seem right");
+        reportError ("ERROR: the metadata for this file doesn't seem right");
         return false;
     }
     
     clearAudioBuffer();
     samples.resize (numChannels);
     
+    numSamplesPerChannel = requestedNumFrames >= 0 ? requestedNumFrames : numSamplesPerChannel;
+
     for (int i = 0; i < numSamplesPerChannel; i++)
     {
         for (int channel = 0; channel < numChannels; channel++)

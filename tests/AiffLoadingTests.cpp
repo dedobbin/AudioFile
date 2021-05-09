@@ -190,4 +190,23 @@ TEST_SUITE ("AiffLoadingTests")
             }
         }
     }
+
+    TEST_CASE ("AiffLoadingTests_Load_Partial")
+    {
+        const int NUM_FRAMES = 10;
+
+        AudioFile<double> audioFileStereo;
+        bool loadedOK = audioFileStereo.load (projectBuildDirectory + "/test-audio/aiff_stereo_24bit_48000.aif", NUM_FRAMES);
+    
+        CHECK (loadedOK);
+        CHECK_EQ(audioFileStereo.getNumChannels(), 2);
+        int totalNumSamples = 0;
+        for (int i = 0; i < audioFileStereo.getNumChannels(); i++){
+            int numSamples = audioFileStereo.samples[i].size();
+            CHECK_EQ(numSamples, 10);
+            totalNumSamples += numSamples;
+        }
+        CHECK_EQ(totalNumSamples, 20);
+
+    }
 }
